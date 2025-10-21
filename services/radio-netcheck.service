@@ -1,0 +1,25 @@
+[Unit]
+Description=RetroRadio netcheck (start portal if offline or /boot/portal exists)
+After=NetworkManager-wait-online.service
+Wants=NetworkManager-wait-online.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c '\
+rm -f /var/local/portal_mode; \
+if [ -f /boot/portal ]; then \
+  touch /var/local/portal_mode; systemctl start station-radio.service; systemctl start radio-portal.service; exit 0; \
+fi; \
+for i in {1..15}; do \
+  if nmcli -t -f GENERAL.STATE device show wlan0 | grep -q "100 (connected)"; then CONNECTED=1; break; fi; \
+  sleep 2; \
+done; \
+if [ "${CONNECTED:-0}" -eq 1 ]; then \
+  ping -c1 -W2 8.8.8.8 >/dev/null 2>&1 && { systemctl start amp-monitor.service || true; systemctl start station-radio.service; systemctl start radio-web.service; exit 0; }; \
+fi; \
+touch /var/local/portal_mode; systemctl start station-radio.service; systemctl start radio-portal.service \
+'
+RemainAfterExit=true
+
+[Install]
+WantedBy=multi-user.target

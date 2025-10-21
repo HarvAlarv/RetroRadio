@@ -1,0 +1,34 @@
+[Unit]
+Description=RetroRadio Wi-Fi Onboarding Portal (NetworkManager AP + Flask)
+After=NetworkManager.service
+Conflicts=radio-web.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Environment=PASSFILE=/var/local/retro_pass
+
+ExecStartPre=/bin/bash -c 'mkdir -p /var/local; PASS=$(shuf -i100000-999999 -n1); echo $PASS > $PASSFILE'
+ExecStart=/bin/bash -c '\
+PASS=$(cat /var/local/retro_pass); \
+nmcli connection delete setup-ap >/dev/null 2>&1 || true; \
+nmcli connection add type wifi ifname wlan0 con-name setup-ap autoconnect no ssid "RetroRadio" mode ap; \
+nmcli connection modify setup-ap 802-11-wireless.band bg ipv4.method shared; \
+nmcli connection modify setup-ap ipv4.addresses 10.10.10.10/24; \
+nmcli connection modify setup-ap wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$PASS"; \
+echo -e "Join Wi-Fi: RetroRadio\nPass: $PASS" > /tmp/display_message; \
+nmcli connection up setup-ap'
+ExecStart=/usr/bin/python3 /home/pi/portal/app.py &
+
+ExecStartPost=/bin/bash -c '\
+while [ ! -f /var/local/radio_portal_done ]; do sleep 1; done; \
+nmcli connection down setup-ap || true; \
+rm -f /var/local/radio_portal_done /var/local/retro_pass; \
+reboot'
+
+ExecStop=/bin/bash -c 'nmcli connection down setup-ap || true; pkill -f "/home/pi/portal/app.py" || true'
+
+User=root
+
+[Install]
+WantedBy=multi-user.target

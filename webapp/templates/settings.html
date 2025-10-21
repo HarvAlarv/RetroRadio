@@ -1,0 +1,20 @@
+{% extends "base.html" %}{% block content %}
+<h4 class="mt-3 mb-3">EQ Settings</h4>
+<div class="card shadow-sm">
+  <div class="card-header">EQ Presets</div>
+  <div class="card-body">
+    <form action="{{ url_for('set_preset_route') }}" method="post">
+      <div class="vstack gap-2">
+      {% for p in presets %}
+        <label class="form-check">
+          <input class="form-check-input" type="radio" name="preset" value="{{ p }}" {% if p==selected %}checked{% endif %}>
+          <span class="form-check-label">{{ p }}</span>
+        </label>
+      {% endfor %}
+      </div>
+      <div class="mt-3 d-grid d-sm-inline"><button class="btn btn-primary">Save</button></div>
+    </form>
+    <p class="text-muted small mt-3 mb-0">Presets switch the 10-band EQ (Warm is default).</p>
+  </div>
+</div>
+{% endblock %}

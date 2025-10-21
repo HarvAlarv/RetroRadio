@@ -1,0 +1,11 @@
+[Unit]
+Description=Reapply EQ preset to MPD
+After=mpd.service
+Requires=mpd.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'p=$(cat /var/local/eq_preset 2>/dev/null || echo "EQ Warm"); mpc enableonly "$p"'
+
+[Install]
+WantedBy=multi-user.target

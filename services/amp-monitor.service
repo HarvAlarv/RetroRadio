@@ -1,0 +1,14 @@
+[Unit]
+Description=RetroRadio Amp Power Monitor (pause/resume MPD on amp off/on)
+After=mpd.service network.target
+Wants=mpd.service
+
+[Service]
+Type=simple
+User=pi
+ExecStart=/usr/bin/python3 /home/pi/amp_monitor.py
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

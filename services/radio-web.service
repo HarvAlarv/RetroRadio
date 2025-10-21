@@ -1,0 +1,12 @@
+[Unit]
+Description=RetroRadio Web Interface
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /home/pi/webapp/app.py
+WorkingDirectory=/home/pi/webapp
+User=pi
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
