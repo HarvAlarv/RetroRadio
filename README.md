@@ -13,7 +13,7 @@ A modern, headless MP3 “radio” that feels vintage:
 # On a fresh Raspberry Pi OS Lite (Bookworm)
 sudo apt-get update
 sudo apt-get install -y git
-git clone https://github.com/<you>/retro-radio.git
+git clone https://github.com/HarvAlarv/retro-radio.git
 cd retro-radio
 sudo bash install.sh
 ```
