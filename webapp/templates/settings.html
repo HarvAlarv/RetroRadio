@@ -1,20 +1,203 @@
-{% extends "base.html" %}{% block content %}
-<h4 class="mt-3 mb-3">EQ Settings</h4>
-<div class="card shadow-sm">
-  <div class="card-header">EQ Presets</div>
-  <div class="card-body">
-    <form action="{{ url_for('set_preset_route') }}" method="post">
-      <div class="vstack gap-2">
-      {% for p in presets %}
-        <label class="form-check">
-          <input class="form-check-input" type="radio" name="preset" value="{{ p }}" {% if p==selected %}checked{% endif %}>
-          <span class="form-check-label">{{ p }}</span>
-        </label>
-      {% endfor %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>RetroRadio · Settings</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 1.25rem; }
+    h1 { margin: 0 0 .75rem 0; }
+    h2 { margin: 1.25rem 0 .5rem; font-size: 1.1rem; }
+    .grid { display:grid; gap:1rem; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+    .card { border:1px solid #e5e5e5; border-radius:10px; padding:1rem; background:#fff; }
+    .row { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+    button, select { padding:.5rem .75rem; border:1px solid #ccc; border-radius:8px; background:#f7f7f7; cursor:pointer; }
+    button:hover { background:#eee; }
+    .pill { padding:.2rem .5rem; border-radius:999px; font-size:.85rem; }
+    .ok { background:#e6fff0; border:1px solid #b8f2d0; }
+    .bad { background:#ffecec; border:1px solid #ffbbbb; }
+    .warn { background:#fff6e0; border:1px solid #ffd699; }
+    .bar { height:12px; background:#eee; border-radius:999px; overflow:hidden; }
+    .bar > div { height:100%; width:0%; background:#7aa7ff; }
+    table { width:100%; border-collapse: collapse; }
+    th, td { padding:.5rem; border-top:1px solid #eee; text-align:left; }
+    nav a { margin-right: 1rem; }
+    .small { color:#666; font-size:.85rem; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="{{ url_for('index') }}">Home</a>
+    <strong>Settings</strong>
+  </nav>
+
+  <h1>Settings</h1>
+
+  <div class="grid">
+    <!-- Audio control -->
+    <div class="card">
+      <h2>Audio Control</h2>
+      <div class="row" style="gap:.35rem;">
+        <button id="prev">⏮ Prev</button>
+        <button id="play">▶️ Play</button>
+        <button id="pause">⏸ Pause</button>
+        <button id="stop">⏹ Stop</button>
+        <button id="next">⏭ Next</button>
       </div>
-      <div class="mt-3 d-grid d-sm-inline"><button class="btn btn-primary">Save</button></div>
-    </form>
-    <p class="text-muted small mt-3 mb-0">Presets switch the 10-band EQ (Warm is default).</p>
+      <div class="row" style="margin-top:.5rem;">
+        <select id="station">
+          {% for it in stations %}
+            <option value="{{ it.id }}">{{ it.label }} ({{ it.id }})</option>
+          {% endfor %}
+        </select>
+        <button id="play-station">Play Selected</button>
+      </div>
+      <div id="now" class="small" style="margin-top:.5rem;">—</div>
+      <div class="small" style="margin-top:.25rem;">MPD volume is fixed at 75% for external amp control.</div>
+    </div>
+
+    <!-- System health -->
+    <div class="card">
+      <h2>System Health</h2>
+      <div class="small" id="disk-text">Disk: —</div>
+      <div class="bar" style="margin-top:.35rem;"><div id="disk-bar"></div></div>
+
+      <h2 style="margin-top:1rem;">Services</h2>
+      <table id="svc">
+        <thead>
+          <tr><th>Service</th><th>Status</th><th>Boot</th><th>Since</th><th></th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <!-- System management -->
+    <div class="card">
+      <h2>System Management</h2>
+      <div class="row" style="margin-bottom:.5rem;">
+        <button id="rescan">Rescan Library</button>
+        <button id="reboot" style="margin-left:.5rem;">Reboot Pi</button>
+      </div>
+      <h2>SSH</h2>
+      <div class="row">
+        <span id="ssh-active" class="pill">Service: —</span>
+        <span id="ssh-enabled" class="pill">Boot: —</span>
+        <button id="ssh-toggle">Toggle SSH</button>
+      </div>
+
+      <h2 style="margin-top:1rem;">EQ Preset</h2>
+      <form method="post" action="{{ url_for('set_preset_route') }}">
+        <select name="preset">
+          {% for p in presets %}
+            <option value="{{ p }}" {% if p == selected %}selected{% endif %}>{{ p }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit">Apply</button>
+      </form>
+    </div>
   </div>
-</div>
-{% endblock %}
+
+  <script>
+    async function jget(u){ const r = await fetch(u); return r.json(); }
+    async function jpost(u, body){
+      const r = await fetch(u, {method: 'POST', headers: {'Content-Type':'application/json'}, body: body?JSON.stringify(body):null});
+      return r.json().catch(()=>({}));
+    }
+    function fmtBytes(b){ if(b<1024) return b+" B"; const u=["KB","MB","GB","TB"]; let i=-1; do{b/=1024;i++;}while(b>=1024&&i<u.length-1); return b.toFixed(1)+" "+u[i]; }
+    function fmtTrack(cur){
+      if(!cur) return "";
+      if(cur.title){ return cur.artist ? `${cur.artist} — ${cur.title}` : cur.title; }
+      return cur.file || "";
+    }
+
+    // Status / now playing
+    async function refreshStatus(){
+      const s = await jget("/api/status");
+      document.getElementById('now').textContent = s.state.toUpperCase() + (s.current ? ` · ${fmtTrack(s.current)}` : "");
+    }
+
+    // Disk
+    async function refreshDisk(){
+      const d = await jget("/api/disks");
+      const pct = d.used_pct || 0;
+      document.getElementById('disk-text').textContent = `Disk: ${fmtBytes(d.used_bytes)} used / ${fmtBytes(d.total_bytes)} total (${pct}%)`;
+      const bar = document.getElementById('disk-bar');
+      bar.style.width = pct + "%";
+    }
+
+    // Services
+    async function refreshServices(){
+      const list = await jget("/api/services");
+      const tbody = document.querySelector("#svc tbody");
+      tbody.innerHTML = "";
+      list.forEach(s=>{
+        const tr = document.createElement("tr");
+        const pillActive = `<span class="pill ${s.active?'ok':'bad'}">${s.active?'active':'inactive'}</span>`;
+        const pillEnabled = `<span class="pill ${s.enabled?'ok':'warn'}">${s.enabled?'enabled':'disabled'}</span>`;
+        tr.innerHTML = `<td>${s.name}</td><td>${pillActive}</td><td>${pillEnabled}</td><td class="small">${s.since||''}</td>
+                        <td><button data-restart="${s.name}">Restart</button></td>`;
+        tbody.appendChild(tr);
+      });
+      tbody.querySelectorAll("button[data-restart]").forEach(btn=>{
+        btn.addEventListener("click", async ()=>{
+          const name = btn.getAttribute("data-restart");
+          btn.disabled = true;
+          await jpost(`/api/service/${name}/restart`);
+          await new Promise(r=>setTimeout(r,600));
+          await refreshServices();
+          btn.disabled = false;
+        });
+      });
+    }
+
+    // SSH
+    async function refreshSSH(){
+      const s = await jget("/api/settings/ssh");
+      const a = document.getElementById("ssh-active");
+      const e = document.getElementById("ssh-enabled");
+      a.textContent = "Service: " + (s.active ? "active" : "inactive");
+      e.textContent = "Boot: " + (s.enabled ? "enabled" : "disabled");
+      a.className = "pill " + (s.active ? "ok" : "bad");
+      e.className = "pill " + (s.enabled ? "ok" : "warn");
+    }
+
+    // Wire buttons
+    document.getElementById("prev").onclick = async()=>{ await jpost("/api/prev"); refreshStatus(); };
+    document.getElementById("play").onclick = async()=>{ await jpost("/api/play"); refreshStatus(); };
+    document.getElementById("pause").onclick = async()=>{ await jpost("/api/pause"); refreshStatus(); };
+    document.getElementById("stop").onclick = async()=>{ await jpost("/api/stop"); refreshStatus(); };
+    document.getElementById("next").onclick = async()=>{ await jpost("/api/next"); refreshStatus(); };
+
+    document.getElementById("play-station").onclick = async()=>{
+      const sel = document.getElementById("station");
+      await jpost(`/api/play_station/${encodeURIComponent(sel.value)}`);
+      refreshStatus();
+    };
+
+    document.getElementById("rescan").onclick = async()=>{
+      await jpost("/api/library/rescan");
+      alert("Library rescan started.");
+    };
+
+    document.getElementById("reboot").onclick = async()=>{
+      if(confirm("Reboot the Pi now?")) {
+        await jpost("/api/system/reboot");
+        alert("Rebooting...");
+      }
+    };
+
+    document.getElementById("ssh-toggle").onclick = async()=>{
+      await jpost("/api/settings/ssh", {action:"toggle"});
+      await new Promise(r=>setTimeout(r,400));
+      refreshSSH();
+    };
+
+    // Initial load + light polling
+    refreshStatus(); refreshDisk(); refreshServices(); refreshSSH();
+    setInterval(refreshStatus, 4000);
+    setInterval(refreshServices, 10000);
+    setInterval(refreshDisk, 15000);
+  </script>
+</body>
+</html>
+
