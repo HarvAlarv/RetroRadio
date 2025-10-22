@@ -17,10 +17,14 @@
   </div></div>
 
   <div class="col-12 col-lg-6"><div class="card shadow-sm h-100">
-    <div class="card-header">Upload New Track</div>
+    <div class="card-header">Upload New Track(s)</div>
     <div class="card-body">
       <form class="row g-2" action="{{ url_for('upload', station=station) }}" method="post" enctype="multipart/form-data">
-        <div class="col-8"><input class="form-control" type="file" name="file" accept=".mp3"></div>
+        <!-- Updated: allow multiple file selection and use name="files" -->
+        <div class="col-8">
+          <input class="form-control" type="file" id="files" name="files" multiple accept="audio/mpeg,.mp3">
+          <div class="form-text">You can select multiple .mp3 files at once.</div>
+        </div>
         <div class="col-4 d-grid"><button class="btn btn-primary" type="submit">Upload</button></div>
       </form>
     </div>
