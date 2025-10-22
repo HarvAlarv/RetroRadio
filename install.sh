@@ -126,6 +126,31 @@ sudo systemctl daemon-reload
 sudo systemctl enable station-radio.service eq-apply.service radio-netcheck.service amp-monitor.service
 # Do not start portal/web here—net may be reconfiguring; leave units to start on boot or by dependency.
 
+echo "[9.5/12] Sudoers (web controls)"
+SUDOERS_TEMP="$(mktemp)"
+SUDOERS_FILE="/etc/sudoers.d/retro-rr"
+cat > "$SUDOERS_TEMP" <<EOF
+${USER_NAME} ALL=(root) NOPASSWD: \
+/bin/systemctl is-active ssh, /bin/systemctl is-enabled ssh, /bin/systemctl start ssh, /bin/systemctl stop ssh, /bin/systemctl enable ssh, /bin/systemctl disable ssh, \
+/bin/systemctl is-active mpd, /bin/systemctl is-enabled mpd, /bin/systemctl restart mpd, \
+/bin/systemctl is-active station-radio, /bin/systemctl is-enabled station-radio, /bin/systemctl restart station-radio, \
+/bin/systemctl is-active radio-web, /bin/systemctl is-enabled radio-web, /bin/systemctl restart radio-web, \
+/bin/systemctl is-active radio-netcheck, /bin/systemctl is-enabled radio-netcheck, /bin/systemctl restart radio-netcheck, \
+/bin/systemctl is-active radio-portal, /bin/systemctl is-enabled radio-portal, /bin/systemctl restart radio-portal, \
+/bin/systemctl is-active eq-apply, /bin/systemctl is-enabled eq-apply, /bin/systemctl restart eq-apply, \
+/bin/systemctl is-active amp-monitor, /bin/systemctl is-enabled amp-monitor, /bin/systemctl restart amp-monitor, \
+/usr/bin/df, /sbin/reboot
+EOF
+
+# Validate and install (atomic)
+if sudo visudo -cf "$SUDOERS_TEMP" >/dev/null 2>&1; then
+  sudo install -m 0440 "$SUDOERS_TEMP" "$SUDOERS_FILE"
+  echo "  - sudoers installed: $SUDOERS_FILE"
+else
+  echo "WARNING: sudoers validation failed; not installing web-control sudoers." >&2
+fi
+rm -f "$SUDOERS_TEMP"
+
 echo "[10/12] Scripts"
 sudo install -m 0755 scripts/station_radio.py "${USER_HOME}/station_radio.py"
 sudo install -m 0755 scripts/amp_monitor.py    "${USER_HOME}/amp_monitor.py"
